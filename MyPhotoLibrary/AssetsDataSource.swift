@@ -336,6 +336,7 @@ fileprivate final class AssetsCollectionViewDataSource: NSObject, UICollectionVi
         self.cellForItemAtResolver = cellForItemAtResolver
         self.prefetchItemsAtResolver = prefetchItemsAtResolver
         self.cancelPrefetchingForItemsAtResolver = cancelPrefetchingForItemsAtResolver
+        super.init()
     }
     
     func numberOfSections(in collectionView: UICollectionView) -> Int {
