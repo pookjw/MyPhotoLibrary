@@ -59,7 +59,6 @@ actor AssetsDataSource {
     @MainActor private var prefetchedImageSubjects: [IndexPath: CurrentValueAsyncThrowingSubject<PrefetchedImage>] = .init()
     
     private var isPrefetchingEnabled: Bool = true
-    private var didRegisterPhotoLibraryChangeObserver: Bool = false
     
     private var memoryWarningTask: Task<Void, Never>? {
         willSet {
@@ -110,9 +109,7 @@ actor AssetsDataSource {
             }
         }
         
-        if !didRegisterPhotoLibraryChangeObserver {
-            PHPhotoLibrary.shared().register(photoLibraryChangeObserver)
-        }
+        _ = photoLibraryChangeObserver
         
         //
         
@@ -369,6 +366,12 @@ fileprivate actor AssetsPhotoLibraryChangeObserver: NSObject, PHPhotoLibraryChan
     
     init(photoLibraryDidChangeResolver: @escaping PhotoLibraryDidChangeResolver) {
         self.photoLibraryDidChangeResolver = photoLibraryDidChangeResolver
+        super.init()
+        PHPhotoLibrary.shared().register(self)
+    }
+    
+    deinit {
+        PHPhotoLibrary.shared().unregisterChangeObserver(self)
     }
     
     nonisolated func photoLibraryDidChange(_ changeInstance: PHChange) {
