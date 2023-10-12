@@ -13,8 +13,9 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
         let windowScene: UIWindowScene = scene as! UIWindowScene
         let window: UIWindow = .init(windowScene: windowScene)
-        let rootViewController: AssetsViewController = .init()
-        window.rootViewController = rootViewController
+        let assetsViewController: AssetsViewController = .init()
+        let navigationController: UINavigationController = .init(rootViewController: assetsViewController)
+        window.rootViewController = navigationController
         window.makeKeyAndVisible()
         self.window = window
     }

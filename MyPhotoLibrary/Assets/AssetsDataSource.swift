@@ -99,7 +99,7 @@ actor AssetsDataSource {
         }
     }
     
-    func load(using collection: PHAssetCollection?) async throws {
+    func load(using collection: PHAssetCollection?) async {
         if memoryWarningTask == nil {
             memoryWarningTask = .init { [weak self] in
                 for await notification in await NotificationCenter.default.notifications(named: UIApplication.didReceiveMemoryWarningNotification) {
@@ -284,9 +284,18 @@ actor AssetsDataSource {
         assert(changeDetails.hasIncrementalChanges, "TODO")
         
         let fetchResultAfterChanges: PHFetchResult<PHAsset> = changeDetails.fetchResultAfterChanges
-        let removedIndexPaths: [IndexPath]? = changeDetails.removedIndexes?.map { .init(item: $0, section: .zero) }
-        let insertedIndexPaths: [IndexPath]? = changeDetails.insertedIndexes?.map { .init(item: $0, section: .zero) }
-        let changedIndexPaths: [IndexPath]? = changeDetails.changedIndexes?.map { .init(item: $0, section: .zero) }
+        
+        let removedIndexPaths: [IndexPath]? = changeDetails
+            .removedIndexes?
+            .map { .init(item: $0, section: .zero) }
+        
+        let insertedIndexPaths: [IndexPath]? = changeDetails
+            .insertedIndexes?
+            .map { .init(item: $0, section: .zero) }
+        
+        let changedIndexPaths: [IndexPath]? = changeDetails
+            .changedIndexes?
+            .map { .init(item: $0, section: .zero) }
         
         await MainActor.run {
             self.fetchResult = fetchResultAfterChanges

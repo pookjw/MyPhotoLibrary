@@ -13,7 +13,8 @@ import Photos
 final class AssetsViewController: UIViewController {
     @ViewLoading private var collectionView: UICollectionView
     @ViewLoading private var viewModel: AssetsViewModel
-    private var loadingTask: Task<Void, Never>?
+    @ViewLoading private var collectionsButton: UIButton
+    
     private let imageRequestOptions: PHImageRequestOptions = {
         let options: PHImageRequestOptions = .init()
         options.isSynchronous = false
@@ -27,20 +28,35 @@ final class AssetsViewController: UIViewController {
         return options
     }()
     
+    private var loadingTask: Task<Void, Never>? {
+        willSet {
+            loadingTask?.cancel()
+        }
+    }
+    private var didChangeCollectionTask: Task<Void, Never>? {
+        willSet {
+            didChangeCollectionTask?.cancel()
+        }
+    }
+    
     deinit {
         loadingTask?.cancel()
+        didChangeCollectionTask?.cancel()
     }
     
     override func viewDidLoad() {
         super.viewDidLoad()
-        setupAttributes()
         setupCollectionView()
         setupViewModel()
+        setupCollectionsButton()
+        setupAttributes()
         load()
     }
     
     private func setupAttributes() {
         view.backgroundColor = .systemBackground
+        navigationItem.largeTitleDisplayMode = .always
+        navigationItem.titleView = collectionsButton
     }
     
     private func setupCollectionView() {
@@ -53,6 +69,16 @@ final class AssetsViewController: UIViewController {
         self.collectionView = collectionView
     }
     
+    private func setupCollectionsButton() {
+        let collectionsButton: UIButton = .init(primaryAction: .init(handler: { [weak self] _ in
+            guard let self else { return }
+            let viewController: CollectionsViewController = .init()
+            self.present(viewController, animated: true)
+        }))
+        
+        self.collectionsButton = collectionsButton
+    }
+    
     private func setupViewModel() {
         let assetsDataSource: AssetsDataSource = buildAssetsDataSource()
         let viewModel: AssetsViewModel = .init(assetsDataSource: assetsDataSource)
@@ -60,9 +86,13 @@ final class AssetsViewController: UIViewController {
     }
     
     private func load() {
+        didChangeCollectionTask = .init { [weak self, viewModel] in
+            for await selectedCollection in await viewModel.selectedCollectionStream {
+                self?.didChangeCollection(selectedCollection)
+            }
+        }
         loadingTask = .init { [viewModel] in
-            try! await viewModel.requestAuthorization()
-            try! await viewModel.assetsDataSource.load(using: nil)
+            try! await viewModel.load()
         }
     }
     
@@ -115,5 +145,13 @@ final class AssetsViewController: UIViewController {
         }
         
         return assetsDataSource
+    }
+    
+    private func didChangeCollection(_ collection: PHAssetCollection?) {
+        var configuration: UIButton.Configuration = .plain()
+        configuration.title = collection?.localizedTitle ?? "Recents"
+        
+        collectionsButton.configuration = configuration
+        collectionsButton.sizeToFit()
     }
 }
