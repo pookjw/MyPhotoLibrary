@@ -53,8 +53,8 @@ actor AssetsDataSource {
     private let estimatedImageSizeProvider: PrefetchingImageSizeProvider
     
     @MainActor private weak var collectionView: UICollectionView?
-    @MainActor private lazy var collectionViewDataSource: AssetsCollectionViewDataSource = buildCollectionViewDataSource()
-    private lazy var photoLibraryChangeObserver: AssetsPhotoLibraryChangeObserver = buildPhotoLibraryChangeObserver()
+    @MainActor private lazy var collectionViewDataSource: CollectionViewDataSourceResolver = buildCollectionViewDataSource()
+    private lazy var photoLibraryChangeObserver: PhotoLibraryChangeObserver = buildPhotoLibraryChangeObserver()
     @MainActor private var fetchResult: PHFetchResult<PHAsset>?
     @MainActor private var prefetchedImageSubjects: [IndexPath: CurrentValueAsyncThrowingSubject<PrefetchedImage>] = .init()
     
@@ -133,7 +133,7 @@ actor AssetsDataSource {
     }
     
     @MainActor
-    private func buildCollectionViewDataSource() -> AssetsCollectionViewDataSource {
+    private func buildCollectionViewDataSource() -> CollectionViewDataSourceResolver {
         .init(
             numberOfSectionsResolver: { collectionView in
                 return 1
@@ -157,7 +157,7 @@ actor AssetsDataSource {
         )
     }
     
-    private func buildPhotoLibraryChangeObserver() -> AssetsPhotoLibraryChangeObserver {
+    private func buildPhotoLibraryChangeObserver() -> PhotoLibraryChangeObserver {
         .init { [weak self] changeInstance in
             Task { [weak self] in
                 await self?.photoLibraryDidChange(changeInstance)
@@ -297,6 +297,10 @@ actor AssetsDataSource {
             .changedIndexes?
             .map { .init(item: $0, section: .zero) }
         
+        guard !(removedIndexPaths?.isEmpty ?? true) || !(insertedIndexPaths?.isEmpty ?? true) || !(changedIndexPaths?.isEmpty ?? true) else {
+            return
+        } 
+        
         await MainActor.run {
             self.fetchResult = fetchResultAfterChanges
             
@@ -316,75 +320,5 @@ actor AssetsDataSource {
                 }
             }
         }
-    }
-}
-
-@MainActor
-fileprivate final class AssetsCollectionViewDataSource: NSObject, UICollectionViewDataSource, UICollectionViewDataSourcePrefetching {
-    typealias NumberOfSectionsResolver = @MainActor (UICollectionView) -> Int
-    typealias NumberOfItemsInSectionResolver = @MainActor ((collectionView: UICollectionView, section: Int)) -> Int
-    typealias CellForItemAtResolver = @MainActor ((collectionView: UICollectionView, indexPath: IndexPath)) -> UICollectionViewCell
-    typealias PrefetchItemsAtResolver = @MainActor ((collectionView: UICollectionView, indexPaths: [IndexPath])) -> Void
-    typealias CancelPrefetchingForItemsAtResolver = @MainActor ((collectionView: UICollectionView, indexPaths: [IndexPath])) -> Void
-    
-    private let numberOfSectionsResolver: NumberOfSectionsResolver
-    private let numberOfItemsInSectionResolver: NumberOfItemsInSectionResolver
-    private let cellForItemAtResolver: CellForItemAtResolver
-    private let prefetchItemsAtResolver: PrefetchItemsAtResolver
-    private let cancelPrefetchingForItemsAtResolver: CancelPrefetchingForItemsAtResolver
-    
-    init(
-        numberOfSectionsResolver: @escaping NumberOfSectionsResolver,
-        numberOfItemsInSectionResolver: @escaping NumberOfItemsInSectionResolver,
-        cellForItemAtResolver: @escaping CellForItemAtResolver,
-        prefetchItemsAtResolver: @escaping PrefetchItemsAtResolver,
-        cancelPrefetchingForItemsAtResolver: @escaping CancelPrefetchingForItemsAtResolver
-    ) {
-        self.numberOfSectionsResolver = numberOfSectionsResolver
-        self.numberOfItemsInSectionResolver = numberOfItemsInSectionResolver
-        self.cellForItemAtResolver = cellForItemAtResolver
-        self.prefetchItemsAtResolver = prefetchItemsAtResolver
-        self.cancelPrefetchingForItemsAtResolver = cancelPrefetchingForItemsAtResolver
-        super.init()
-    }
-    
-    func numberOfSections(in collectionView: UICollectionView) -> Int {
-        numberOfSectionsResolver(collectionView)
-    }
-    
-    func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
-        numberOfItemsInSectionResolver((collectionView, section))
-    }
-    
-    func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
-        cellForItemAtResolver((collectionView, indexPath))
-    }
-    
-    func collectionView(_ collectionView: UICollectionView, prefetchItemsAt indexPaths: [IndexPath]) {
-        prefetchItemsAtResolver((collectionView, indexPaths))
-    }
-    
-    func collectionView(_ collectionView: UICollectionView, cancelPrefetchingForItemsAt indexPaths: [IndexPath]) {
-        cancelPrefetchingForItemsAtResolver((collectionView, indexPaths))
-    }
-}
-
-fileprivate actor AssetsPhotoLibraryChangeObserver: NSObject, PHPhotoLibraryChangeObserver {
-    typealias PhotoLibraryDidChangeResolver = @Sendable (PHChange) -> Void
-    
-    private let photoLibraryDidChangeResolver: PhotoLibraryDidChangeResolver
-    
-    init(photoLibraryDidChangeResolver: @escaping PhotoLibraryDidChangeResolver) {
-        self.photoLibraryDidChangeResolver = photoLibraryDidChangeResolver
-        super.init()
-        PHPhotoLibrary.shared().register(self)
-    }
-    
-    deinit {
-        PHPhotoLibrary.shared().unregisterChangeObserver(self)
-    }
-    
-    nonisolated func photoLibraryDidChange(_ changeInstance: PHChange) {
-        photoLibraryDidChangeResolver(changeInstance)
     }
 }

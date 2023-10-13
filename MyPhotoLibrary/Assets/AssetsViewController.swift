@@ -38,10 +38,16 @@ final class AssetsViewController: UIViewController {
             didChangeCollectionTask?.cancel()
         }
     }
+    private var collectionsViewControllerDidChangeSelectedCollection: Task<Void, Never>? {
+        willSet {
+            collectionsViewControllerDidChangeSelectedCollection?.cancel()
+        }
+    }
     
     deinit {
         loadingTask?.cancel()
         didChangeCollectionTask?.cancel()
+        collectionsViewControllerDidChangeSelectedCollection?.cancel()
     }
     
     override func viewDidLoad() {
@@ -55,7 +61,7 @@ final class AssetsViewController: UIViewController {
     
     private func setupAttributes() {
         view.backgroundColor = .systemBackground
-        navigationItem.largeTitleDisplayMode = .always
+        navigationItem.largeTitleDisplayMode = .never
         navigationItem.titleView = collectionsButton
     }
     
@@ -71,9 +77,21 @@ final class AssetsViewController: UIViewController {
     
     private func setupCollectionsButton() {
         let collectionsButton: UIButton = .init(primaryAction: .init(handler: { [weak self] _ in
-            guard let self else { return }
-            let viewController: CollectionsViewController = .init()
-            self.present(viewController, animated: true)
+            Task {
+                guard let self else { return }
+                let selectedCollectionSubject: CurrentValueAsyncSubject<PHAssetCollection?> = self.viewModel.selectedCollectionSubject
+                let selectedCollection: PHAssetCollection? = await selectedCollectionSubject.value ?? nil
+                
+                let viewController: CollectionsViewController = .init(selectedCollection: selectedCollection)
+                
+                self.collectionsViewControllerDidChangeSelectedCollection = .init { [subject = viewController.selectedCollectionSubject] in
+                    for await selectedCollection in await subject() {
+                        await selectedCollectionSubject.yield(selectedCollection)
+                    }
+                }
+                
+                self.present(viewController, animated: true)
+            }
         }))
         
         self.collectionsButton = collectionsButton
@@ -87,8 +105,8 @@ final class AssetsViewController: UIViewController {
     
     private func load() {
         didChangeCollectionTask = .init { [weak self, viewModel] in
-            for await selectedCollection in await viewModel.selectedCollectionStream {
-                self?.didChangeCollection(selectedCollection)
+            for await selectedCollection in await viewModel.selectedCollectionSubject() {
+                await self?.didChangeCollection(selectedCollection)
             }
         }
         loadingTask = .init { [viewModel] in
@@ -147,11 +165,15 @@ final class AssetsViewController: UIViewController {
         return assetsDataSource
     }
     
-    private func didChangeCollection(_ collection: PHAssetCollection?) {
-        var configuration: UIButton.Configuration = .plain()
-        configuration.title = collection?.localizedTitle ?? "Recents"
+    private nonisolated func didChangeCollection(_ collection: PHAssetCollection?) async {
+        await MainActor.run {
+            var configuration: UIButton.Configuration = .plain()
+            configuration.title = collection?.localizedTitle ?? "Recents"
+            
+            collectionsButton.configuration = configuration
+            collectionsButton.sizeToFit()
+        }
         
-        collectionsButton.configuration = configuration
-        collectionsButton.sizeToFit()
+        
     }
 }

@@ -174,11 +174,13 @@ struct AssetsContentView: View {
                 
                 if let image: UIImage {
                     image.prepareForDisplay { image in
-                        guard currentRequestID == requestID else {
-                            return
+                        Task { @MainActor in
+                            guard currentRequestID == requestID else {
+                                return
+                            }
+                            
+                            self.image = image
                         }
-                        
-                        self.image = image
                     }
                 } else {
                     self.image = nil

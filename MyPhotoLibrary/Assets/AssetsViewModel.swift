@@ -13,13 +13,7 @@ actor AssetsViewModel {
         case cannotAccessPhotoLibrary
     }
     
-    var selectedCollectionStream: AsyncStream<PHAssetCollection?> {
-        get async {
-            await selectedCollectionSubject.stream
-        }
-    }
-    
-    private let selectedCollectionSubject: CurrentValueAsyncSubject<PHAssetCollection?> = .init()
+    let selectedCollectionSubject: CurrentValueAsyncSubject<PHAssetCollection?> = .init(value: nil)
     private let assetsDataSource: AssetsDataSource
     
     init(assetsDataSource: AssetsDataSource) {
@@ -28,8 +22,8 @@ actor AssetsViewModel {
     
     func load() async throws {
         try await requestAuthorization()
-        await selectedCollectionSubject.yield(nil)
-        await assetsDataSource.load(using: nil)
+        let selectedCollection: PHAssetCollection? = await selectedCollectionSubject.value ?? nil
+        await assetsDataSource.load(using: selectedCollection)
     }
     
     private func requestAuthorization(authorizationStatus: PHAuthorizationStatus = PHPhotoLibrary.authorizationStatus(for: .readWrite)) async throws {

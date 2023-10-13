@@ -1,5 +1,5 @@
 //
-//  CurrentValueAsyncSubject.swift
+//  AsyncSubject.swift
 //  MyPhotoLibrary
 //
 //  Created by Jinwoo Kim on 10/13/23.
@@ -7,14 +7,7 @@
 
 import Foundation
 
-actor CurrentValueAsyncSubject<Element: Sendable>: Equatable {
-    static func == (lhs: CurrentValueAsyncSubject<Element>, rhs: CurrentValueAsyncSubject<Element>) -> Bool {
-        lhs.uuid == rhs.uuid
-    }
-    
-    private(set) var value: Element?
-    private let uuid: UUID = .init()
-    
+actor AsyncSubject<Element: Sendable> {
     var stream: AsyncStream<Element> {
         let (stream, continuation) = AsyncStream<Element>.makeStream()
         let key = UUID()
@@ -32,10 +25,6 @@ actor CurrentValueAsyncSubject<Element: Sendable>: Equatable {
     
     private var continuations: [UUID: AsyncStream<Element>.Continuation] = .init()
     
-    init(value: Element) {
-        self.value = value
-    }
-    
     deinit {
         continuations.values.forEach { continuation in
             continuation.finish()
@@ -47,18 +36,12 @@ actor CurrentValueAsyncSubject<Element: Sendable>: Equatable {
     }
     
     func yield(with result: Result<Element, Never>) {
-        if case .success(let newValue) = result {
-            value = newValue
-        }
-        
         continuations.values.forEach { continuation in
             continuation.yield(with: result)
         }
     }
     
     func yield(_ value: Element) {
-        self.value = value
-        
         continuations.values.forEach { continuation in
             continuation.yield(value)
         }
