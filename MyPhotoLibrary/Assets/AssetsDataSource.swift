@@ -220,7 +220,10 @@ actor AssetsDataSource {
                 }
             }
             
-            guard let phAsset: PHAsset = await fetchResult?.object(at: indexPath.item) else {
+//            guard let phAsset: PHAsset = await fetchResult?.object(at: indexPath.item) else {
+//                continue
+//            }
+            guard let phAsset: PHAsset = await fetchResult?.ff_PHAsset(at: indexPath.item) else {
                 continue
             }
             
@@ -323,7 +326,7 @@ actor AssetsDataSource {
     private func cellForItem(collectionView: UICollectionView, at indexPath: IndexPath) -> UICollectionViewCell {
         let prefetchedImageSubject: CurrentValueAsyncThrowingSubject<PrefetchedImage>? = prefetchedImageSubjects[indexPath]
         
-        return cellProvider((collectionView, indexPath, fetchResult!.object(at: indexPath.item), prefetchedImageSubject))
+        return cellProvider((collectionView, indexPath, fetchResult!.ff_PHAsset(at: indexPath.item), prefetchedImageSubject))
     }
     
     private func didReceiveMemoryWarningNotification(_ notification: Notification) async {
