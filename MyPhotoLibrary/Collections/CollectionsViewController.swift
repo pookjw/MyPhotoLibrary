@@ -104,5 +104,7 @@ extension CollectionsViewController: UICollectionViewDelegate {
             let selectedCollection: PHAssetCollection? = await viewModel.collection(at: indexPath)
             await selectedCollectionSubject.yield(selectedCollection)
         }
+        
+        dismiss(animated: true)
     }
 }

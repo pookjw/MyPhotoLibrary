@@ -40,7 +40,7 @@ actor AssetsDataSource {
                 }
             }
             
-            var requestID: PHImageRequestID? {
+            fileprivate var requestID: PHImageRequestID? {
                 switch self {
                 case .preparing:
                     nil
@@ -69,11 +69,7 @@ actor AssetsDataSource {
     @MainActor private lazy var collectionViewDataSource: CollectionViewDataSourceResolver = buildCollectionViewDataSource()
     private lazy var photoLibraryChangeObserver: PhotoLibraryChangeObserver = buildPhotoLibraryChangeObserver()
     @MainActor private var fetchResult: PHFetchResult<PHAsset>?
-    @MainActor private var prefetchedImageSubjects: [IndexPath: CurrentValueAsyncThrowingSubject<PrefetchedImage>] = .init() {
-        didSet {
-            print("ABC", prefetchedImageSubjects.keys)
-        }
-    }
+    @MainActor private var prefetchedImageSubjects: [IndexPath: CurrentValueAsyncThrowingSubject<PrefetchedImage>] = .init()
     
     @MainActor private var isPrefetchingEnabled: Bool = true
     
@@ -229,6 +225,10 @@ actor AssetsDataSource {
             }
             
             await prefetchedImageSubject.setFinishHandler { [weak self] in
+                if let requestID: PHImageRequestID = prefetchedImageSubject.value?.state.requestID {
+                    PHImageManager.default().cancelImageRequest(requestID)
+                }
+                
                 self?.prefetchedImageSubjects.removeValue(forKey: indexPath)
             }
             
@@ -248,17 +248,26 @@ actor AssetsDataSource {
                     options: imageRequestOptions
                 ) { image, userInfo in
                     guard !(userInfo?[PHImageCancelledKey] as? Bool ?? false) else {
-                        Task {
-                            await prefetchedImageSubject.yield(with: .failure(CancellationError()))
-                            await prefetchedImageSubject.finish()
+                        Task { @MainActor in
+                            guard !prefetchedImageSubject.isFinished else {
+                                return
+                            }
+                            
+                            prefetchedImageSubject.yield(with: .failure(CancellationError()))
+                            prefetchedImageSubject.finish()
                         }
+                        
                         return
                     }
                     
                     if let error: NSError = userInfo?[PHImageErrorKey] as? NSError {
-                        Task {
-                            await prefetchedImageSubject.yield(with: .failure(error))
-                            await prefetchedImageSubject.finish()
+                        Task { @MainActor in
+                            guard !prefetchedImageSubject.isFinished else {
+                                return
+                            }
+                            
+                            prefetchedImageSubject.yield(with: .failure(error))
+                            prefetchedImageSubject.finish()
                         }
                         return
                     }
@@ -276,11 +285,23 @@ actor AssetsDataSource {
                             state = .prefetched(requestID, preparedImage)
                         }
                         
-                        await prefetchedImageSubject.yield(.init(requestedImageSize: estimatedSize, state: state))
+                        await MainActor.run {
+                            guard !prefetchedImageSubject.isFinished else {
+                                return
+                            }
+                            
+                            prefetchedImageSubject.yield(.init(requestedImageSize: estimatedSize, state: state))
+                        }
                     }
                 }
             
-            await prefetchedImageSubject.yield(.init(requestedImageSize: estimatedSize, state: .prefetching(requestID)))
+            await MainActor.run {
+                guard !prefetchedImageSubject.isFinished else {
+                    return
+                }
+                
+                prefetchedImageSubject.yield(.init(requestedImageSize: estimatedSize, state: .prefetching(requestID)))
+            }
         }
     }
     

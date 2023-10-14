@@ -71,9 +71,6 @@ struct AssetsContentView: View {
             
             image = nil
             oldValue.prefetchedImage?.finish()
-            if let requestID: PHImageRequestID = oldValue.prefetchedImage?.value?.state.requestID {
-                PHImageManager.default().cancelImageRequest(requestID)
-            }
             
             if let prefetchedImageSubject: CurrentValueAsyncThrowingSubject<AssetsDataSource.PrefetchedImage> = newValue.prefetchedImage {
                 cancelCurrentRequest()
@@ -100,11 +97,9 @@ struct AssetsContentView: View {
                 return
             }
             
-            currentRequestID = prefetchedImage.state.requestID
-            
             if viewSize * UIScreen.main.scale != prefetchedImage.requestedImageSize {
-                prefetchedImageSubject.finish()
                 request()
+                prefetchedImageSubject.finish()
                 return
             }
             
@@ -112,6 +107,10 @@ struct AssetsContentView: View {
             
             if case .prefetched(_, _) = prefetchedImage.state {
                 prefetchedImageSubject.finish()
+                return
+            }
+            
+            guard !prefetchedImageSubject.isFinished else {
                 return
             }
             
@@ -126,8 +125,8 @@ struct AssetsContentView: View {
                     }
                     
                     if viewSize * UIScreen.main.scale != prefetchedImage.requestedImageSize {
-                        prefetchedImageSubject.finish()
                         request()
+                        prefetchedImageSubject.finish()
                         return
                     }
                     
@@ -139,11 +138,12 @@ struct AssetsContentView: View {
                     }
                 }
             } catch is CancellationError {
+                cancelCurrentRequest()
                 prefetchedImageSubject.finish()
                 currentRequestID = nil
             } catch {
-                prefetchedImageSubject.finish()
                 request()
+                prefetchedImageSubject.finish()
             }
         }
         .task(id: viewSize) {
@@ -165,8 +165,6 @@ struct AssetsContentView: View {
         guard viewSize != .zero else {
             return
         }
-        
-//        print("ABC", item.index, viewSize)
         
         currentRequestID = PHImageManager
             .default()

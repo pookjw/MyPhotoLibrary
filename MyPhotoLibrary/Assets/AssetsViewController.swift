@@ -33,21 +33,15 @@ final class AssetsViewController: UIViewController {
             loadingTask?.cancel()
         }
     }
-    private var didChangeCollectionTask: Task<Void, Never>? {
+    private var didChangeSelectedCollection: Task<Void, Never>? {
         willSet {
-            didChangeCollectionTask?.cancel()
-        }
-    }
-    private var collectionsViewControllerDidChangeSelectedCollection: Task<Void, Never>? {
-        willSet {
-            collectionsViewControllerDidChangeSelectedCollection?.cancel()
+            didChangeSelectedCollection?.cancel()
         }
     }
     
     deinit {
         loadingTask?.cancel()
-        didChangeCollectionTask?.cancel()
-        collectionsViewControllerDidChangeSelectedCollection?.cancel()
+        didChangeSelectedCollection?.cancel()
     }
     
     override func viewDidLoad() {
@@ -79,14 +73,12 @@ final class AssetsViewController: UIViewController {
         let collectionsButton: UIButton = .init(primaryAction: .init(handler: { [weak self] _ in
             Task {
                 guard let self else { return }
-                let selectedCollectionSubject: CurrentValueAsyncSubject<PHAssetCollection?> = self.viewModel.selectedCollectionSubject
-                let selectedCollection: PHAssetCollection? = await selectedCollectionSubject.value ?? nil
                 
-                let viewController: CollectionsViewController = .init(selectedCollection: selectedCollection)
+                let viewController: CollectionsViewController = .init(selectedCollection: nil)
                 
-                self.collectionsViewControllerDidChangeSelectedCollection = .init { [subject = viewController.selectedCollectionSubject] in
+                self.didChangeSelectedCollection = .init { [weak self, subject = viewController.selectedCollectionSubject] in
                     for await selectedCollection in await subject() {
-                        await selectedCollectionSubject.yield(selectedCollection)
+                        try! await self?.select(collection: selectedCollection)
                     }
                 }
                 
@@ -104,13 +96,8 @@ final class AssetsViewController: UIViewController {
     }
     
     private func load() {
-        didChangeCollectionTask = .init { [weak self, viewModel] in
-            for await selectedCollection in await viewModel.selectedCollectionSubject() {
-                await self?.didChangeCollection(selectedCollection)
-            }
-        }
-        loadingTask = .init { [viewModel] in
-            try! await viewModel.load()
+        loadingTask = .init { [weak self] in
+            try! await self?.select(collection: nil)
         }
     }
     
@@ -120,18 +107,23 @@ final class AssetsViewController: UIViewController {
         
         return UICollectionViewCompositionalLayout(
             sectionProvider: { sectionIndex, environment in
+                let quotient: Int = .init(floorf(Float(environment.container.contentSize.width) / 200.0))
+                let count: Int = (quotient < 2) ? 2 : quotient
+                let count_f: Float = .init(count)
+                
                 let itemSize: NSCollectionLayoutSize = .init(
-                    widthDimension: .fractionalWidth(1.0 / 3.0),
+                    widthDimension: .fractionalWidth(.init(1.0 / count_f)),
                     heightDimension: .fractionalHeight(1.0)
                 )
+                
                 let item: NSCollectionLayoutItem = .init(layoutSize: itemSize)
                 
                 let groupSize: NSCollectionLayoutSize = .init(
                     widthDimension: .fractionalWidth(1.0),
-                    heightDimension: .fractionalWidth(1.0 / 3.0)
+                    heightDimension: .fractionalWidth(.init(1.0 / count_f))
                 )
                 
-                let group: NSCollectionLayoutGroup = .horizontal(layoutSize: groupSize, repeatingSubitem: item, count: 3)
+                let group: NSCollectionLayoutGroup = .horizontal(layoutSize: groupSize, repeatingSubitem: item, count: count)
                 let section: NSCollectionLayoutSection = .init(group: group)
                 
                 return section
@@ -165,14 +157,15 @@ final class AssetsViewController: UIViewController {
         return assetsDataSource
     }
     
-    private nonisolated func didChangeCollection(_ collection: PHAssetCollection?) async {
+    private nonisolated func select(collection: PHAssetCollection?) async throws {
+        try await viewModel.load(collection: collection)
+        
         await MainActor.run {
             var configuration: UIButton.Configuration = .plain()
             configuration.title = collection?.localizedTitle ?? "Recents"
             
             collectionsButton.configuration = configuration
+            collectionsButton.sizeToFit()
         }
-        
-        
     }
 }
