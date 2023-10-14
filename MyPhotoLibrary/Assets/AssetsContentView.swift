@@ -10,7 +10,7 @@ import Photos
 
 struct AssetsContentView: View {
     struct Item: Equatable {
-        let fetchResult: PHFetchResult<PHAsset>
+        let asset: PHAsset
         let prefetchedImage: CurrentValueAsyncThrowingSubject<AssetsDataSource.PrefetchedImage>?
         let index: Int
     }
@@ -70,8 +70,11 @@ struct AssetsContentView: View {
             }
             
             image = nil
+            Task {
+                await oldValue.prefetchedImage?.finish()
+            }
             
-            if let prefetchedImageSubject: CurrentValueAsyncThrowingSubject<AssetsDataSource.PrefetchedImage> = item.prefetchedImage {
+            if let prefetchedImageSubject: CurrentValueAsyncThrowingSubject<AssetsDataSource.PrefetchedImage> = newValue.prefetchedImage {
                 cancelCurrentRequest()
                 self.prefetchedImageSubject = prefetchedImageSubject
             } else {
@@ -92,12 +95,14 @@ struct AssetsContentView: View {
             
             guard !Task.isCancelled else {
                 cancelCurrentRequest()
+                await prefetchedImageSubject.finish()
                 return
             }
             
             currentRequestID = prefetchedImage.requestID
             
             if viewSize * UIScreen.main.scale != prefetchedImage.requestedImageSize {
+                await prefetchedImageSubject.finish()
                 request()
                 return
             }
@@ -105,6 +110,7 @@ struct AssetsContentView: View {
             image = prefetchedImage.state.image
             
             if case .prefetched(_) = prefetchedImage.state {
+                await prefetchedImageSubject.finish()
                 return
             }
             
@@ -114,10 +120,12 @@ struct AssetsContentView: View {
                 for try await prefetchedImage in await prefetchedImageSubject() {
                     guard !Task.isCancelled else {
                         cancelCurrentRequest()
+                        await prefetchedImageSubject.finish()
                         break
                     }
                     
                     if viewSize * UIScreen.main.scale != prefetchedImage.requestedImageSize {
+                        await prefetchedImageSubject.finish()
                         request()
                         return
                     }
@@ -125,12 +133,15 @@ struct AssetsContentView: View {
                     image = prefetchedImage.state.image
                     
                     if case .prefetched(_) = prefetchedImage.state {
+                        await prefetchedImageSubject.finish()
                         break
                     }
                 }
             } catch is CancellationError {
+                await prefetchedImageSubject.finish()
                 currentRequestID = nil
             } catch {
+                await prefetchedImageSubject.finish()
                 request()
             }
         }
@@ -159,7 +170,7 @@ struct AssetsContentView: View {
         currentRequestID = PHImageManager
             .default()
             .requestImage(
-                for: item.fetchResult.object(at: item.index),
+                for: item.asset,
                 targetSize: viewSize * UIScreen.main.scale,
 //                targetSize: PHImageManagerMaximumSize,
                 contentMode: .aspectFill,

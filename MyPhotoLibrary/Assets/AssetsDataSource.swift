@@ -45,7 +45,7 @@ actor AssetsDataSource {
         fileprivate(set) var state: State
     }
     
-    typealias CellProvider = @Sendable @MainActor ((collectionView: UICollectionView, indexPath: IndexPath, fetchResult: PHFetchResult<PHAsset>, prefetchedImage: CurrentValueAsyncThrowingSubject<PrefetchedImage>?)) -> UICollectionViewCell
+    typealias CellProvider = @Sendable @MainActor ((collectionView: UICollectionView, indexPath: IndexPath, asset: PHAsset, prefetchedImage: CurrentValueAsyncThrowingSubject<PrefetchedImage>?)) -> UICollectionViewCell
     typealias PrefetchingImageSizeProvider = @Sendable @MainActor ((collectionView: UICollectionView, indexPath: IndexPath)) -> CGSize?
     
     private let imageRequestOptions: PHImageRequestOptions
@@ -166,6 +166,7 @@ actor AssetsDataSource {
     }
     
     private func prefetchItems(for indexPaths: [IndexPath]) async {
+        await print("ABC", prefetchedImageSubjects.keys)
         guard let collectionView: UICollectionView = await collectionView else { return }
         
         for indexPath in indexPaths {
@@ -187,6 +188,16 @@ actor AssetsDataSource {
             
             let prefetchedImageSubject: CurrentValueAsyncThrowingSubject<PrefetchedImage> = .init()
             
+            await MainActor.run { [weak self] in
+                self?.prefetchedImageSubjects[indexPath] = prefetchedImageSubject
+            }
+            
+            await prefetchedImageSubject.setFinishHandler { [weak self] in
+                await MainActor.run { [weak self] in
+                    _ = self?.prefetchedImageSubjects.removeValue(forKey: indexPath)
+                }
+            }
+            
             let requestID: PHImageRequestID = PHImageManager
                 .default()
                 .requestImage(
@@ -194,38 +205,28 @@ actor AssetsDataSource {
                     targetSize: estimatedSize,
                     contentMode: .aspectFill,
                     options: imageRequestOptions
-                ) { [weak self] image, userInfo in
+                ) { image, userInfo in
                     guard !(userInfo?[PHImageCancelledKey] as? Bool ?? false) else {
-                        Task { [weak self] in
-                            await MainActor.run { [weak self] in
-                                _ = self?.prefetchedImageSubjects.removeValue(forKey: indexPath)
-                            }
+                        Task {
                             await prefetchedImageSubject.yield(with: .failure(CancellationError()))
+                            await prefetchedImageSubject.finish()
                         }
                         return
                     }
                     
                     if let error: NSError = userInfo?[PHImageErrorKey] as? NSError {
-                        Task { [weak self] in
-                            await MainActor.run { [weak self] in
-                                _ = self?.prefetchedImageSubjects.removeValue(forKey: indexPath)
-                            }
+                        Task {
                             await prefetchedImageSubject.yield(with: .failure(error))
+                            await prefetchedImageSubject.finish()
                         }
                         return
                     }
                     
+                    let requestID: PHImageRequestID! = userInfo?[PHImageResultRequestIDKey] as? PHImageRequestID
                     let isDegraded: Bool = userInfo?[PHImageResultIsDegradedKey] as? Bool ?? false
                     
-                    Task { [weak self] in
-                        guard var prefetchedImage: PrefetchedImage = await prefetchedImageSubject.value else {
-                            await MainActor.run { [weak self] in
-                                _ = self?.prefetchedImageSubjects.removeValue(forKey: indexPath)
-                            }
-                            return
-                        }
-                        
-                        let preparedImage: UIImage? = image?.preparingForDisplay()
+                    Task {
+                        let preparedImage: UIImage? = await image?.byPreparingForDisplay()
                         
                         let state: PrefetchedImage.State
                         if isDegraded {
@@ -234,30 +235,24 @@ actor AssetsDataSource {
                             state = .prefetched(preparedImage)
                         }
                         
-                        prefetchedImage.state = state
-                        
-                        await MainActor.run { [weak self] in
-                            _ = self?.prefetchedImageSubjects.removeValue(forKey: indexPath)
-                        }
-                        await prefetchedImageSubject.yield(prefetchedImage)
+                        await prefetchedImageSubject.yield(.init(requestID: requestID, requestedImageSize: estimatedSize, state: state))
                     }
                 }
             
-            await MainActor.run { [weak self] in
-                self?.prefetchedImageSubjects[indexPath] = prefetchedImageSubject
-            }
             await prefetchedImageSubject.yield(.init(requestID: requestID, requestedImageSize: estimatedSize, state: .prefetching))
         }
     }
     
     private func cancelPrefetching(for indexPaths: [IndexPath]) async {
         for indexPath in indexPaths {
-            if let requestID: PHImageRequestID = await MainActor.run(body: { self.prefetchedImageSubjects })[indexPath]?.value?.requestID {
-                PHImageManager.default().cancelImageRequest(requestID)
+            guard let prefetchedImageSubject: CurrentValueAsyncThrowingSubject<AssetsDataSource.PrefetchedImage> = await MainActor.run(body: { self.prefetchedImageSubjects })[indexPath] else {
+                continue
             }
             
-            await MainActor.run {
-                _ = self.prefetchedImageSubjects.removeValue(forKey: indexPath)
+            await prefetchedImageSubject.finish()
+            
+            if let requestID: PHImageRequestID = await prefetchedImageSubject.value?.requestID {
+                PHImageManager.default().cancelImageRequest(requestID)
             }
         }
     }
@@ -266,7 +261,7 @@ actor AssetsDataSource {
     private func cellForItem(collectionView: UICollectionView, at indexPath: IndexPath) -> UICollectionViewCell {
         let prefetchedImageSubject: CurrentValueAsyncThrowingSubject<PrefetchedImage>? = prefetchedImageSubjects[indexPath]
         
-        return cellProvider((collectionView, indexPath, fetchResult!, prefetchedImageSubject))
+        return cellProvider((collectionView, indexPath, fetchResult!.object(at: indexPath.item), prefetchedImageSubject))
     }
     
     private func didReceiveMemoryWarningNotification(_ notification: Notification) {

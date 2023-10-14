@@ -13,9 +13,14 @@ actor CurrentValueAsyncThrowingSubject<Element: Sendable>: Equatable {
     }
     
     private(set) var value: Element?
+    private(set) var isFinished: Bool = false
+    
+    private var finishHandler: (@Sendable () async -> Void)?
     private let uuid: UUID = .init()
     
     var stream: AsyncThrowingStream<Element, Error> {
+        assert(!isFinished)
+        
         let (stream, continuation) = AsyncThrowingStream<Element, Error>.makeStream()
         let key = UUID()
         
@@ -43,6 +48,8 @@ actor CurrentValueAsyncThrowingSubject<Element: Sendable>: Equatable {
     }
     
     func yield(with result: Result<Element, Error>) {
+        assert(!isFinished)
+        
         if case .success(let newValue) = result {
             value = newValue
         }
@@ -53,11 +60,27 @@ actor CurrentValueAsyncThrowingSubject<Element: Sendable>: Equatable {
     }
     
     func yield(_ value: Element) {
+        assert(!isFinished)
+        
         self.value = value
         
         continuations.values.forEach { continuation in
             continuation.yield(value)
         }
+    }
+    
+    func finish() async {
+        guard !isFinished else {
+            return
+        }
+        
+        isFinished = true
+        await finishHandler?()
+        finishHandler = nil
+    }
+    
+    func setFinishHandler(_ finishHandler: @escaping @Sendable () async -> Void) {
+        self.finishHandler = finishHandler
     }
     
     private func remove(key: UUID) {
