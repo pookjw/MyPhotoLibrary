@@ -7,15 +7,16 @@
 
 import Foundation
 
-actor CurrentValueAsyncThrowingSubject<Element: Sendable>: Equatable {
-    static func == (lhs: CurrentValueAsyncThrowingSubject<Element>, rhs: CurrentValueAsyncThrowingSubject<Element>) -> Bool {
+@MainActor
+final class CurrentValueAsyncThrowingSubject<Element: Sendable>: Equatable {
+    static nonisolated func == (lhs: CurrentValueAsyncThrowingSubject<Element>, rhs: CurrentValueAsyncThrowingSubject<Element>) -> Bool {
         lhs.uuid == rhs.uuid
     }
     
     private(set) var value: Element?
     private(set) var isFinished: Bool = false
     
-    private var finishHandler: (@Sendable () async -> Void)?
+    private var finishHandler: (@Sendable @MainActor () -> Void)?
     private let uuid: UUID = .init()
     
     var stream: AsyncThrowingStream<Element, Error> {
@@ -36,6 +37,10 @@ actor CurrentValueAsyncThrowingSubject<Element: Sendable>: Equatable {
     }
     
     private var continuations: [UUID: AsyncThrowingStream<Element, Error>.Continuation] = .init()
+    
+    init(value: Element? = nil) {
+        self.value = value
+    }
     
     deinit {
         continuations.values.forEach { continuation in
@@ -69,17 +74,17 @@ actor CurrentValueAsyncThrowingSubject<Element: Sendable>: Equatable {
         }
     }
     
-    func finish() async {
+    func finish() {
         guard !isFinished else {
             return
         }
         
         isFinished = true
-        await finishHandler?()
+        finishHandler?()
         finishHandler = nil
     }
     
-    func setFinishHandler(_ finishHandler: @escaping @Sendable () async -> Void) {
+    func setFinishHandler(_ finishHandler: @escaping @Sendable @MainActor () -> Void) {
         self.finishHandler = finishHandler
     }
     

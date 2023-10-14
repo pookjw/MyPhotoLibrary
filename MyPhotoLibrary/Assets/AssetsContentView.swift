@@ -70,8 +70,9 @@ struct AssetsContentView: View {
             }
             
             image = nil
-            Task {
-                await oldValue.prefetchedImage?.finish()
+            oldValue.prefetchedImage?.finish()
+            if let requestID: PHImageRequestID = oldValue.prefetchedImage?.value?.state.requestID {
+                PHImageManager.default().cancelImageRequest(requestID)
             }
             
             if let prefetchedImageSubject: CurrentValueAsyncThrowingSubject<AssetsDataSource.PrefetchedImage> = newValue.prefetchedImage {
@@ -87,7 +88,7 @@ struct AssetsContentView: View {
                 return
             }
             
-            guard let prefetchedImage: AssetsDataSource.PrefetchedImage = await prefetchedImageSubject.value else {
+            guard let prefetchedImage: AssetsDataSource.PrefetchedImage = prefetchedImageSubject.value else {
                 fatalError()
             }
             
@@ -95,59 +96,59 @@ struct AssetsContentView: View {
             
             guard !Task.isCancelled else {
                 cancelCurrentRequest()
-                await prefetchedImageSubject.finish()
+                prefetchedImageSubject.finish()
                 return
             }
             
-            currentRequestID = prefetchedImage.requestID
+            currentRequestID = prefetchedImage.state.requestID
             
             if viewSize * UIScreen.main.scale != prefetchedImage.requestedImageSize {
-                await prefetchedImageSubject.finish()
+                prefetchedImageSubject.finish()
                 request()
                 return
             }
             
             image = prefetchedImage.state.image
             
-            if case .prefetched(_) = prefetchedImage.state {
-                await prefetchedImageSubject.finish()
+            if case .prefetched(_, _) = prefetchedImage.state {
+                prefetchedImageSubject.finish()
                 return
             }
             
             //
             
             do {
-                for try await prefetchedImage in await prefetchedImageSubject() {
+                for try await prefetchedImage in prefetchedImageSubject() {
                     guard !Task.isCancelled else {
                         cancelCurrentRequest()
-                        await prefetchedImageSubject.finish()
+                        prefetchedImageSubject.finish()
                         break
                     }
                     
                     if viewSize * UIScreen.main.scale != prefetchedImage.requestedImageSize {
-                        await prefetchedImageSubject.finish()
+                        prefetchedImageSubject.finish()
                         request()
                         return
                     }
                     
                     image = prefetchedImage.state.image
                     
-                    if case .prefetched(_) = prefetchedImage.state {
-                        await prefetchedImageSubject.finish()
+                    if case .prefetched(_, _) = prefetchedImage.state {
+                        prefetchedImageSubject.finish()
                         break
                     }
                 }
             } catch is CancellationError {
-                await prefetchedImageSubject.finish()
+                prefetchedImageSubject.finish()
                 currentRequestID = nil
             } catch {
-                await prefetchedImageSubject.finish()
+                prefetchedImageSubject.finish()
                 request()
             }
         }
         .task(id: viewSize) {
             if
-                let prefetchedImage: AssetsDataSource.PrefetchedImage = await prefetchedImageSubject?.value,
+                let prefetchedImage: AssetsDataSource.PrefetchedImage = prefetchedImageSubject?.value,
                 prefetchedImage.requestedImageSize != viewSize * UIScreen.main.scale
             {
                 request()
