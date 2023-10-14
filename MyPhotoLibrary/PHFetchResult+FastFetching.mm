@@ -16,7 +16,7 @@
 - (PHAsset *)ff_PHAssetAtIndex:(NSInteger)index {
     id objectID = reinterpret_cast<id (*)(PHFetchResult *, SEL, NSUInteger)>(objc_msgSend)(self, NSSelectorFromString(@"objectIDAtIndex:"), index);
     auto fetchResult = reinterpret_cast<PHFetchResult<PHAsset *> * (*)(Class, SEL, NSArray *, PHFetchOptions *)>(objc_msgSend)(PHAsset.class, NSSelectorFromString(@"fetchAssetsWithObjectIDs:options:"), @[objectID], nil);
-    return fetchResult[0];
+    return fetchResult.firstObject;
 }
 #endif
 

@@ -220,9 +220,6 @@ actor AssetsDataSource {
                 }
             }
             
-//            guard let phAsset: PHAsset = await fetchResult?.object(at: indexPath.item) else {
-//                continue
-//            }
             guard let phAsset: PHAsset = await fetchResult?.ff_PHAsset(at: indexPath.item) else {
                 continue
             }
