@@ -356,7 +356,7 @@ actor AssetsDataSource {
             .changedIndexes?
             .map { .init(item: $0, section: .zero) }
         
-        guard !(removedIndexPaths?.isEmpty ?? true) || !(insertedIndexPaths?.isEmpty ?? true) || !(changedIndexPaths?.isEmpty ?? true) else {
+        guard !(removedIndexPaths?.isEmpty ?? true) || !(insertedIndexPaths?.isEmpty ?? true) || !(changedIndexPaths?.isEmpty ?? true) || changeDetails.hasMoves else {
             return
         } 
         
@@ -376,6 +376,10 @@ actor AssetsDataSource {
                 
                 if let changedIndexPaths: [IndexPath] {
                     collectionView.reconfigureItems(at: changedIndexPaths)
+                }
+                
+                changeDetails.enumerateMoves { fromIndex, toIndex in
+                    collectionView.moveItem(at: .init(item: fromIndex, section: .zero), to: .init(item: toIndex, section: .zero))
                 }
             }
         }
