@@ -10,9 +10,9 @@ import Photos
 
 struct AssetsContentView: View {
     struct Item: Equatable {
-        let asset: PHAsset
-        let prefetchedImage: CurrentValueAsyncThrowingSubject<AssetsDataSource.PrefetchedImage>?
+        let fetchResult: PHFetchResult<PHAsset>
         let index: Int
+        let prefetchedImage: CurrentValueAsyncThrowingSubject<AssetsDataSource.PrefetchedImage>?
     }
     
     private let item: Item
@@ -71,13 +71,14 @@ struct AssetsContentView: View {
             
             image = nil
             oldValue.prefetchedImage?.finish()
-            
-            if let prefetchedImageSubject: CurrentValueAsyncThrowingSubject<AssetsDataSource.PrefetchedImage> = newValue.prefetchedImage {
+        }
+        .task(id: item) {
+            if let prefetchedImageSubject: CurrentValueAsyncThrowingSubject<AssetsDataSource.PrefetchedImage> = item.prefetchedImage {
                 cancelCurrentRequest()
                 self.prefetchedImageSubject = prefetchedImageSubject
             } else {
                 prefetchedImageSubject = nil
-                request()
+                await request(asset: asset)
             }
         }
         .task(id: prefetchedImageSubject) {
@@ -98,7 +99,7 @@ struct AssetsContentView: View {
             }
             
             if viewSize * UIScreen.main.scale != prefetchedImage.requestedImageSize {
-                request()
+                await request(asset: asset)
                 prefetchedImageSubject.finish()
                 return
             }
@@ -125,7 +126,7 @@ struct AssetsContentView: View {
                     }
                     
                     if viewSize * UIScreen.main.scale != prefetchedImage.requestedImageSize {
-                        request()
+                        await request(asset: asset)
                         prefetchedImageSubject.finish()
                         return
                     }
@@ -142,7 +143,7 @@ struct AssetsContentView: View {
                 prefetchedImageSubject.finish()
                 currentRequestID = nil
             } catch {
-                request()
+                await request(asset: asset)
                 prefetchedImageSubject.finish()
             }
         }
@@ -151,15 +152,15 @@ struct AssetsContentView: View {
                 let prefetchedImage: AssetsDataSource.PrefetchedImage = prefetchedImageSubject?.value,
                 prefetchedImage.requestedImageSize != viewSize * UIScreen.main.scale
             {
-                request()
+                await request(asset: asset)
             } else if currentRequestID == nil && image == nil {
-                request()
+                await request(asset: asset)
             }
         }
     }
     
     @MainActor
-    private func request() {
+    private func request(asset: PHAsset) {
         cancelCurrentRequest()
         
         guard viewSize != .zero else {
@@ -169,7 +170,7 @@ struct AssetsContentView: View {
         currentRequestID = PHImageManager
             .default()
             .requestImage(
-                for: item.asset,
+                for: asset,
                 targetSize: viewSize * UIScreen.main.scale,
 //                targetSize: PHImageManagerMaximumSize,
                 contentMode: .aspectFill,
@@ -204,5 +205,11 @@ struct AssetsContentView: View {
         }
         
         currentRequestID = nil
+    }
+    
+    private var asset: PHAsset {
+        get async {
+            item.fetchResult.ff_PHAsset(at: item.index)
+        }
     }
 }

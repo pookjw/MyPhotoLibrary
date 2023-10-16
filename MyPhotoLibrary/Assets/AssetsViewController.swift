@@ -144,8 +144,8 @@ final class AssetsViewController: UIViewController {
     private func buildAssetsDataSource() -> AssetsDataSource {
         let cellRegistration: UICollectionView.CellRegistration<UICollectionViewCell, AssetsContentView.Item> = buildCellRegistration()
         
-        let assetsDataSource: AssetsDataSource = .init(collectionView: collectionView, imageRequestOptions: imageRequestOptions) { (collectionView: UICollectionView, indexPath: IndexPath, asset: PHAsset, prefetchedImage: CurrentValueAsyncThrowingSubject<AssetsDataSource.PrefetchedImage>?) in
-            return collectionView.dequeueConfiguredReusableCell(using: cellRegistration, for: indexPath, item: .init(asset: asset, prefetchedImage: prefetchedImage, index: indexPath.item))
+        let assetsDataSource: AssetsDataSource = .init(collectionView: collectionView, imageRequestOptions: imageRequestOptions) { (collectionView: UICollectionView, indexPath: IndexPath, fetchResult: PHFetchResult<PHAsset>, prefetchedImage: CurrentValueAsyncThrowingSubject<AssetsDataSource.PrefetchedImage>?) in
+            return collectionView.dequeueConfiguredReusableCell(using: cellRegistration, for: indexPath, item: .init(fetchResult: fetchResult, index: indexPath.item, prefetchedImage: prefetchedImage))
         } estimatedImageSizeProvider: { (collectionView: UICollectionView, indexPath: IndexPath) in
             guard let size: CGSize = collectionView.visibleCells.first?.bounds.size else {
                 return nil

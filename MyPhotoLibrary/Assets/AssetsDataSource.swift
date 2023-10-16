@@ -58,7 +58,7 @@ actor AssetsDataSource {
         fileprivate(set) var state: State
     }
     
-    typealias CellProvider = @Sendable @MainActor ((collectionView: UICollectionView, indexPath: IndexPath, asset: PHAsset, prefetchedImage: CurrentValueAsyncThrowingSubject<PrefetchedImage>?)) -> UICollectionViewCell
+    typealias CellProvider = @Sendable @MainActor ((collectionView: UICollectionView, indexPath: IndexPath, fetchResult: PHFetchResult<PHAsset>, prefetchedImage: CurrentValueAsyncThrowingSubject<PrefetchedImage>?)) -> UICollectionViewCell
     typealias PrefetchingImageSizeProvider = @Sendable @MainActor ((collectionView: UICollectionView, indexPath: IndexPath)) -> CGSize?
     
     private let imageRequestOptions: PHImageRequestOptions
@@ -323,7 +323,7 @@ actor AssetsDataSource {
     private func cellForItem(collectionView: UICollectionView, at indexPath: IndexPath) -> UICollectionViewCell {
         let prefetchedImageSubject: CurrentValueAsyncThrowingSubject<PrefetchedImage>? = prefetchedImageSubjects[indexPath]
         
-        return cellProvider((collectionView, indexPath, fetchResult!.ff_PHAsset(at: indexPath.item), prefetchedImageSubject))
+        return cellProvider((collectionView, indexPath, fetchResult!, prefetchedImageSubject))
     }
     
     private func didReceiveMemoryWarningNotification(_ notification: Notification) async {
