@@ -101,6 +101,8 @@ actor AssetsDataSource {
     deinit {
         memoryWarningTask?.cancel()
         
+        let prefetchedImageSubjects: [IndexPath: CurrentValueAsyncThrowingSubject<PrefetchedImage>] = prefetchedImageSubjects
+        
         Task {
             for prefetchedImage in await prefetchedImageSubjects.values {
                 guard let requestID: PHImageRequestID = await prefetchedImage.value?.state.requestID else {
