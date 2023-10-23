@@ -22,6 +22,7 @@ struct AssetsContentView: View {
     @State private var image: UIImage?
     @State private var viewSize: CGSize = .zero
     @State private var opacity: Double = 1.0
+    @Environment(\.displayScale) private var displayScale: CGFloat
     
     init(item: Item, imageRequestOptions: PHImageRequestOptions) {
         self.item = item
@@ -98,7 +99,7 @@ struct AssetsContentView: View {
                 return
             }
             
-            if viewSize * UIScreen.main.scale != prefetchedImage.requestedImageSize {
+            if viewSize * displayScale != prefetchedImage.requestedImageSize {
                 await request(asset: asset)
                 prefetchedImageSubject.finish()
                 return
@@ -125,7 +126,7 @@ struct AssetsContentView: View {
                         break
                     }
                     
-                    if viewSize * UIScreen.main.scale != prefetchedImage.requestedImageSize {
+                    if viewSize * displayScale != prefetchedImage.requestedImageSize {
                         await request(asset: asset)
                         prefetchedImageSubject.finish()
                         return
@@ -150,7 +151,17 @@ struct AssetsContentView: View {
         .task(id: viewSize) {
             if
                 let prefetchedImage: AssetsDataSource.PrefetchedImage = prefetchedImageSubject?.value,
-                prefetchedImage.requestedImageSize != viewSize * UIScreen.main.scale
+                prefetchedImage.requestedImageSize != viewSize * displayScale
+            {
+                await request(asset: asset)
+            } else if currentRequestID == nil && image == nil {
+                await request(asset: asset)
+            }
+        }
+        .task(id: displayScale) {
+            if
+                let prefetchedImage: AssetsDataSource.PrefetchedImage = prefetchedImageSubject?.value,
+                prefetchedImage.requestedImageSize != viewSize * displayScale
             {
                 await request(asset: asset)
             } else if currentRequestID == nil && image == nil {
@@ -171,7 +182,7 @@ struct AssetsContentView: View {
             .default()
             .requestImage(
                 for: asset,
-                targetSize: viewSize * UIScreen.main.scale,
+                targetSize: viewSize * displayScale,
 //                targetSize: PHImageManagerMaximumSize,
                 contentMode: .aspectFill,
                 options: imageRequestOptions

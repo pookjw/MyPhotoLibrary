@@ -104,7 +104,7 @@ actor AssetsDataSource {
         let prefetchedImageSubjects: [IndexPath: CurrentValueAsyncThrowingSubject<PrefetchedImage>] = prefetchedImageSubjects
         
         Task {
-            for prefetchedImage in await prefetchedImageSubjects.values {
+            for prefetchedImage in prefetchedImageSubjects.values {
                 guard let requestID: PHImageRequestID = await prefetchedImage.value?.state.requestID else {
                     continue
                 }
