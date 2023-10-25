@@ -134,9 +134,22 @@ actor AssetsDataSource {
         ]
         fetchOptions.wantsIncrementalChangeDetails = true
         
-        let fetchResult: PHFetchResult<PHAsset>
+        //
+        
+        let _collection: PHAssetCollection?
         if let collection: PHAssetCollection {
-            fetchResult = PHAsset.fetchAssets(in: collection, options: fetchOptions)
+            _collection = collection
+        } else {
+            let collectionsFetchOptions: PHFetchOptions = .init()
+            collectionsFetchOptions.fetchLimit = 1
+            
+            let collectionsFetchResult: PHFetchResult<PHAssetCollection> = PHAssetCollection.fetchAssetCollections(with: .smartAlbum, subtype: .smartAlbumUserLibrary, options: collectionsFetchOptions)
+            _collection = collectionsFetchResult.firstObject
+        }
+        
+        let fetchResult: PHFetchResult<PHAsset>
+        if let _collection: PHAssetCollection {
+            fetchResult = PHAsset.fetchAssets(in: _collection, options: fetchOptions)
         } else {
             fetchResult = PHAsset.fetchAssets(with: fetchOptions)
         }
