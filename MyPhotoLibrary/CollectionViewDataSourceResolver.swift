@@ -8,31 +8,27 @@
 import UIKit
 
 @MainActor
-final class CollectionViewDataSourceResolver: NSObject, UICollectionViewDataSource, UICollectionViewDataSourcePrefetching {
-    typealias NumberOfSectionsResolver = @MainActor (UICollectionView) -> Int
-    typealias NumberOfItemsInSectionResolver = @MainActor ((collectionView: UICollectionView, section: Int)) -> Int
-    typealias CellForItemAtResolver = @MainActor ((collectionView: UICollectionView, indexPath: IndexPath)) -> UICollectionViewCell
-    typealias PrefetchItemsAtResolver = @MainActor ((collectionView: UICollectionView, indexPaths: [IndexPath])) -> Void
-    typealias CancelPrefetchingForItemsAtResolver = @MainActor ((collectionView: UICollectionView, indexPaths: [IndexPath])) -> Void
+final class CollectionViewDataSourceResolver: NSObject, UICollectionViewDataSource {
+    typealias NumberOfSectionsResolver = @Sendable @MainActor (UICollectionView) -> Int
+    typealias NumberOfItemsInSectionResolver = @Sendable @MainActor (_ collectionView: UICollectionView, _ section: Int) -> Int
+    typealias CellForItemAtResolver = @Sendable @MainActor (_ collectionView: UICollectionView, _ indexPath: IndexPath) -> UICollectionViewCell
+    typealias ViewForSupplementaryElementOfKindAtResolver = @Sendable @MainActor (_ collectionView: UICollectionView, _ kind: String, _ indexPath: IndexPath) -> UICollectionReusableView
     
     private let numberOfSectionsResolver: NumberOfSectionsResolver
     private let numberOfItemsInSectionResolver: NumberOfItemsInSectionResolver
     private let cellForItemAtResolver: CellForItemAtResolver
-    private let prefetchItemsAtResolver: PrefetchItemsAtResolver
-    private let cancelPrefetchingForItemsAtResolver: CancelPrefetchingForItemsAtResolver
+    private let viewForSupplementaryElementOfKindAtResolver: ViewForSupplementaryElementOfKindAtResolver
     
     init(
         numberOfSectionsResolver: @escaping NumberOfSectionsResolver,
         numberOfItemsInSectionResolver: @escaping NumberOfItemsInSectionResolver,
         cellForItemAtResolver: @escaping CellForItemAtResolver,
-        prefetchItemsAtResolver: @escaping PrefetchItemsAtResolver,
-        cancelPrefetchingForItemsAtResolver: @escaping CancelPrefetchingForItemsAtResolver
+        viewForSupplementaryElementOfKindAtResolver: @escaping ViewForSupplementaryElementOfKindAtResolver
     ) {
         self.numberOfSectionsResolver = numberOfSectionsResolver
         self.numberOfItemsInSectionResolver = numberOfItemsInSectionResolver
         self.cellForItemAtResolver = cellForItemAtResolver
-        self.prefetchItemsAtResolver = prefetchItemsAtResolver
-        self.cancelPrefetchingForItemsAtResolver = cancelPrefetchingForItemsAtResolver
+        self.viewForSupplementaryElementOfKindAtResolver = viewForSupplementaryElementOfKindAtResolver
         super.init()
     }
     
@@ -41,18 +37,14 @@ final class CollectionViewDataSourceResolver: NSObject, UICollectionViewDataSour
     }
     
     func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
-        numberOfItemsInSectionResolver((collectionView, section))
+        numberOfItemsInSectionResolver(collectionView, section)
     }
     
     func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
-        cellForItemAtResolver((collectionView, indexPath))
+        cellForItemAtResolver(collectionView, indexPath)
     }
     
-    func collectionView(_ collectionView: UICollectionView, prefetchItemsAt indexPaths: [IndexPath]) {
-        prefetchItemsAtResolver((collectionView, indexPaths))
-    }
-    
-    func collectionView(_ collectionView: UICollectionView, cancelPrefetchingForItemsAt indexPaths: [IndexPath]) {
-        cancelPrefetchingForItemsAtResolver((collectionView, indexPaths))
+    func collectionView(_ collectionView: UICollectionView, viewForSupplementaryElementOfKind kind: String, at indexPath: IndexPath) -> UICollectionReusableView {
+        viewForSupplementaryElementOfKindAtResolver(collectionView, kind, indexPath)
     }
 }

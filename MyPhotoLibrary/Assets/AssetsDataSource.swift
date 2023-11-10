@@ -67,6 +67,7 @@ actor AssetsDataSource {
     
     @MainActor private weak var collectionView: UICollectionView?
     @MainActor private lazy var collectionViewDataSource: CollectionViewDataSourceResolver = buildCollectionViewDataSource()
+    @MainActor private lazy var collectionViewDataSourcePrefetchingResolver: CollectionViewDataSourcePrefetchingResolver = buildCollectionViewDataSourcePrefetchingResolver()
     private lazy var photoLibraryChangeObserver: PhotoLibraryChangeObserver = buildPhotoLibraryChangeObserver()
     @MainActor private var fetchResult: PHFetchResult<PHAsset>?
     @MainActor private var prefetchedImageSubjects: [IndexPath: CurrentValueAsyncThrowingSubject<PrefetchedImage>] = .init()
@@ -95,7 +96,7 @@ actor AssetsDataSource {
         self.estimatedImageSizeProvider = estimatedImageSizeProvider
         
         collectionView.dataSource = collectionViewDataSource
-        collectionView.prefetchDataSource = collectionViewDataSource
+        collectionView.prefetchDataSource = collectionViewDataSourcePrefetchingResolver
     }
     
     deinit {
@@ -172,8 +173,17 @@ actor AssetsDataSource {
             cellForItemAtResolver: { [weak self] collectionView, indexPath in
                 return self?.cellForItem(collectionView: collectionView, at: indexPath) ?? .init()
             },
+            viewForSupplementaryElementOfKindAtResolver: { _, _, _ in
+                fatalError()
+            }
+        )
+    }
+    
+    @MainActor
+    private func buildCollectionViewDataSourcePrefetchingResolver() -> CollectionViewDataSourcePrefetchingResolver {
+        .init(
             prefetchItemsAtResolver: { [weak self] collectionView, indexPaths in
-                guard 
+                guard
                     let self,
                     self.isPrefetchingEnabled
                 else {

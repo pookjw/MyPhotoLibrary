@@ -20,10 +20,10 @@ actor CollectionsViewModel {
     }
     
     func indexPath(for collection: PHAssetCollection) async -> IndexPath? {
-        await collectionsDataSource.indexPath(for: collection)
+        await collectionsDataSource.indexPath(from: collection)
     }
     
     func collection(at indexPath: IndexPath) async -> PHAssetCollection? {
-        await collectionsDataSource.collection(for: indexPath)
+        await collectionsDataSource.phAssetCollection(from: indexPath)
     }
 }

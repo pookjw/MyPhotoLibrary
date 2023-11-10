@@ -22,6 +22,7 @@
 		4F6C66E82AD84FFD007AE2B4 /* CollectionsViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F6C66E72AD84FFD007AE2B4 /* CollectionsViewController.swift */; };
 		4F6C66EA2AD850E7007AE2B4 /* CurrentValueAsyncSubject.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F6C66E92AD850E7007AE2B4 /* CurrentValueAsyncSubject.swift */; };
 		4F6C66EC2AD852A3007AE2B4 /* CollectionsDataSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F6C66EB2AD852A3007AE2B4 /* CollectionsDataSource.swift */; };
+		4F9147502AFE266000323E6C /* CollectionViewDataSourcePrefetchingResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F91474F2AFE266000323E6C /* CollectionViewDataSourcePrefetchingResolver.swift */; };
 		4FA2BC032ADAECE8008C1ABC /* PHFetchResult+FastFetching.mm in Sources */ = {isa = PBXBuildFile; fileRef = 4FA2BC022ADAECE8008C1ABC /* PHFetchResult+FastFetching.mm */; };
 		4FC69BAD2AD7972F000CCC28 /* AssetsContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FC69BAC2AD7972F000CCC28 /* AssetsContentView.swift */; };
 		4FC69BAF2AD7C2DE000CCC28 /* CurrentValueAsyncThrowingSubject.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FC69BAE2AD7C2DE000CCC28 /* CurrentValueAsyncThrowingSubject.swift */; };
@@ -45,6 +46,7 @@
 		4F6C66E72AD84FFD007AE2B4 /* CollectionsViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectionsViewController.swift; sourceTree = "<group>"; };
 		4F6C66E92AD850E7007AE2B4 /* CurrentValueAsyncSubject.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CurrentValueAsyncSubject.swift; sourceTree = "<group>"; };
 		4F6C66EB2AD852A3007AE2B4 /* CollectionsDataSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectionsDataSource.swift; sourceTree = "<group>"; };
+		4F91474F2AFE266000323E6C /* CollectionViewDataSourcePrefetchingResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectionViewDataSourcePrefetchingResolver.swift; sourceTree = "<group>"; };
 		4FA2BC002ADAECE7008C1ABC /* MyPhotoLibrary-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "MyPhotoLibrary-Bridging-Header.h"; sourceTree = "<group>"; };
 		4FA2BC012ADAECE8008C1ABC /* PHFetchResult+FastFetching.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "PHFetchResult+FastFetching.h"; sourceTree = "<group>"; };
 		4FA2BC022ADAECE8008C1ABC /* PHFetchResult+FastFetching.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = "PHFetchResult+FastFetching.mm"; sourceTree = "<group>"; };
@@ -89,6 +91,7 @@
 				4FC69BAE2AD7C2DE000CCC28 /* CurrentValueAsyncThrowingSubject.swift */,
 				4F1A800C2AD7E73500A0F37C /* CGSize+Ext.swift */,
 				4F5F70CA2AD906900096D964 /* CollectionViewDataSourceResolver.swift */,
+				4F91474F2AFE266000323E6C /* CollectionViewDataSourcePrefetchingResolver.swift */,
 				4F5F70CC2AD906A70096D964 /* PhotoLibraryChangeObserverResolver.swift */,
 				4FA2BC012ADAECE8008C1ABC /* PHFetchResult+FastFetching.h */,
 				4FA2BC022ADAECE8008C1ABC /* PHFetchResult+FastFetching.mm */,
@@ -208,6 +211,7 @@
 				4F5F70CB2AD906900096D964 /* CollectionViewDataSourceResolver.swift in Sources */,
 				4F6C66EC2AD852A3007AE2B4 /* CollectionsDataSource.swift in Sources */,
 				4FA2BC032ADAECE8008C1ABC /* PHFetchResult+FastFetching.mm in Sources */,
+				4F9147502AFE266000323E6C /* CollectionViewDataSourcePrefetchingResolver.swift in Sources */,
 				4F5F04D02AD5A2A90052B3BD /* AssetsViewModel.swift in Sources */,
 				4F5F70CD2AD906A70096D964 /* PhotoLibraryChangeObserverResolver.swift in Sources */,
 			);

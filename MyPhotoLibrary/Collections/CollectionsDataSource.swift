@@ -9,101 +9,124 @@ import UIKit
 import Photos
 
 actor CollectionsDataSource {
-    typealias CellProvider = @Sendable @MainActor ((collectionView: UICollectionView, indexPath: IndexPath, collection: PHAssetCollection)) -> UICollectionViewCell
+    typealias CellProvider = @Sendable @MainActor (_ collectionView: UICollectionView, _ indexPath: IndexPath, _ fetchResult: PHFetchResult<PHAssetCollection>) -> UICollectionViewCell
+    typealias SupplementaryViewProvider = @Sendable @MainActor (_ collectionView: UICollectionView, _ elementKind: String, _ indexPath: IndexPath) -> UICollectionReusableView
     
     private let cellProvider: CellProvider
-    
+    private let supplementaryViewProvider: SupplementaryViewProvider
     @MainActor private weak var collectionView: UICollectionView?
-    @MainActor private lazy var collectionViewDataSource: CollectionViewDataSourceResolver = buildCollectionViewDataSource()
+    @MainActor private lazy var collectionViewDataSourceResolver: CollectionViewDataSourceResolver = buildCollectionViewDataSourceResolver()
     private lazy var photoLibraryChangeObserver: PhotoLibraryChangeObserver = buildPhotoLibraryChangeObserver()
     
-    @MainActor private var smartCollectionsFetchResult: PHFetchResult<PHAssetCollection>?
-    @MainActor private var collectionsFetchResult: PHFetchResult<PHAssetCollection>?
+    @MainActor private var numberOfSections: Int = .zero
+    @MainActor private var numberOfItemsInSection: [Int: Int] = .init()
+    @MainActor private var fetchResults: [PHAssetCollectionType: PHFetchResult<PHAssetCollection>] = .init()
+    @MainActor private var collectionTypesForSection: [Int: PHAssetCollectionType] = .init()
     
     @MainActor
     init(
         collectionView: UICollectionView,
-        cellProvider: @escaping CellProvider
+        cellProvider: @escaping CellProvider,
+        supplementaryViewProvider: @escaping SupplementaryViewProvider
     ) {
-        assert(collectionView.dataSource == nil, "-[UICollectionView dataSource] must be nil.")
-        assert(collectionView.prefetchDataSource == nil, "-[UICollectionView prefetchDataSource] must be nil.")
+        assert(collectionView.dataSource == nil, "-[UICollectionView dataSource] must be nil")
         
         self.collectionView = collectionView
         self.cellProvider = cellProvider
+        self.supplementaryViewProvider = supplementaryViewProvider
         
-        collectionView.dataSource = collectionViewDataSource
-        collectionView.prefetchDataSource = collectionViewDataSource
+        collectionView.dataSource = collectionViewDataSourceResolver
     }
     
     func load() async {
         _ = photoLibraryChangeObserver
         
         let fetchOptions: PHFetchOptions = .init()
-        fetchOptions.sortDescriptors = [.init(.init(\PHAssetCollection.startDate, order: .reverse))]
         fetchOptions.wantsIncrementalChangeDetails = true
         
         let smartCollectionsFetchResult: PHFetchResult<PHAssetCollection> = PHAssetCollection.fetchAssetCollections(with: .smartAlbum, subtype: .any, options: fetchOptions)
         let collectionsFetchResult: PHFetchResult<PHAssetCollection> = PHAssetCollection.fetchAssetCollections(with: .album, subtype: .any, options: fetchOptions)
         
+        guard !Task.isCancelled else {
+            return
+        }
+        
+        let fetchResults: [PHAssetCollectionType: PHFetchResult<PHAssetCollection>] = [
+            .smartAlbum: smartCollectionsFetchResult,
+            .album: collectionsFetchResult
+        ]
+        
+        let (numberOfSections, numberOfItemsInSection, collectionTypesForSection): (Int, [Int: Int], [Int: PHAssetCollectionType]) = dataSourceProperties(from: fetchResults)
+        
         await MainActor.run {
-            self.smartCollectionsFetchResult = smartCollectionsFetchResult
-            self.collectionsFetchResult = collectionsFetchResult
-            self.collectionView?.reloadData()
+            self.numberOfSections = numberOfSections
+            self.numberOfItemsInSection = numberOfItemsInSection
+            self.fetchResults = fetchResults
+            self.collectionTypesForSection = collectionTypesForSection
+            collectionView?.reloadData()
         }
     }
     
-    func collection(for indexPath: IndexPath) async -> PHAssetCollection? {
-        guard let fetchResult: PHFetchResult<PHAssetCollection> = await fetchResult(for: indexPath.section) else {
+    func phAssetCollection(from indexPath: IndexPath) async -> PHAssetCollection? {
+        let (collectionTypesForSection, fetchResults): ([Int: PHAssetCollectionType], [PHAssetCollectionType: PHFetchResult<PHAssetCollection>]) = await MainActor.run { (self.collectionTypesForSection, self.fetchResults) }
+        
+        guard
+            let collectionType: PHAssetCollectionType = collectionTypesForSection[indexPath.section],
+            let fetchResult: PHFetchResult<PHAssetCollection> = fetchResults[collectionType],
+            indexPath.item < fetchResult.count
+        else {
             return nil
         }
         
         return fetchResult.object(at: indexPath.item)
     }
     
-    func indexPath(for collection: PHAssetCollection) async -> IndexPath? {
-        switch collection.assetCollectionType {
-        case .smartAlbum:
-            guard 
-                let smartCollectionsFetchResult: PHFetchResult<PHAssetCollection> = await smartCollectionsFetchResult,
-                let section: Int = await sections(smartCollectionsFetchResult: smartCollectionsFetchResult, collectionsFetchResult: collectionsFetchResult).smartCollectionsSection
-            else {
-                return nil
+    func indexPath(from phAssetCollection: PHAssetCollection) async -> IndexPath? {
+        let (collectionTypesForSection, fetchResults): ([Int: PHAssetCollectionType], [PHAssetCollectionType: PHFetchResult<PHAssetCollection>]) = await MainActor.run { (self.collectionTypesForSection, self.fetchResults) }
+        
+        for (collectionType, fetchResult) in fetchResults {
+            var item: Int?
+            
+            fetchResult.enumerateObjects { _phAssetCollection, index, stopPtr in
+                if _phAssetCollection == phAssetCollection {
+                    item = index
+                    stopPtr.pointee = .init(true)
+                }
             }
             
-            let index: Int = smartCollectionsFetchResult.index(of: collection)
-            return .init(item: index, section: section)
-        case .album:
-            guard 
-                let collectionsFetchResult: PHFetchResult<PHAssetCollection> = await collectionsFetchResult,
-                let section: Int = await sections(smartCollectionsFetchResult: smartCollectionsFetchResult, collectionsFetchResult: collectionsFetchResult).collectionsSection
-            else {
-                return nil
+            if
+                let item: Int,
+                let secton: Int = collectionTypesForSection.first(where: { $0.value == collectionType })?.key
+            {
+                return .init(item: item, section: secton)
             }
-            
-            let index: Int = collectionsFetchResult.index(of: collection)
-            return .init(item: index, section: section)
-        default:
-            return nil
         }
+        
+        return nil
     }
     
     @MainActor
-    private func buildCollectionViewDataSource() -> CollectionViewDataSourceResolver {
+    private func buildCollectionViewDataSourceResolver() -> CollectionViewDataSourceResolver {
         .init(
-            numberOfSectionsResolver: { [weak self] collectionView in
+            numberOfSectionsResolver: { [weak self] _ in
                 return self?.numberOfSections ?? .zero
             },
-            numberOfItemsInSectionResolver: { [weak self] collectionView, section in
-                return self?.nunberOfItemsInSection(section) ?? .zero
+            numberOfItemsInSectionResolver: { [weak self] (_, section) in
+                return self?.numberOfItemsInSection[section] ?? .zero
             },
-            cellForItemAtResolver: { [weak self] collectionView, indexPath in
-                return self?.cellForItem(collectionView: collectionView, at: indexPath) ?? .init()
-            },
-            prefetchItemsAtResolver: { collectionView, indexPaths in
+            cellForItemAtResolver: { [weak self] (collectionView, indexPath) in
+                guard
+                    let self,
+                    let collectionType: PHAssetCollectionType = self.collectionTypesForSection[indexPath.section],
+                    let fetchResult: PHFetchResult<PHAssetCollection> = self.fetchResults[collectionType]
+                else {
+                    fatalError()
+                }
                 
+                return self.cellProvider(collectionView, indexPath, fetchResult)
             },
-            cancelPrefetchingForItemsAtResolver: { collectionView, indexPaths in
-                
+            viewForSupplementaryElementOfKindAtResolver: { [supplementaryViewProvider] (collectionView, kind, indexPath) in
+                supplementaryViewProvider(collectionView, kind, indexPath)
             }
         )
     }
@@ -116,234 +139,114 @@ actor CollectionsDataSource {
         }
     }
     
-    @MainActor private var numberOfSections: Int {
-        let smartCollectionsCount: Int = smartCollectionsFetchResult?.count ?? .zero
-        let collectionsCount: Int = collectionsFetchResult?.count ?? .zero
+    private nonisolated func dataSourceProperties(from fetchResults: [PHAssetCollectionType: PHFetchResult<PHAssetCollection>]) -> (numberOfSections: Int, numberOfItemsInSection: [Int: Int], collectionTypesForSection: [Int: PHAssetCollectionType]) {
+        var numberOfItemsInSection: [Int: Int] = .init()
+        var collectionTypesForSection: [Int: PHAssetCollectionType] = .init()
         
-        return (smartCollectionsCount > .zero ? 1 : .zero) + (collectionsCount > .zero ? 1 : .zero)
-    }
-    
-    @MainActor private func nunberOfItemsInSection(_ section: Int) -> Int {
-        fetchResult(for: section)?.count ?? .zero
-    }
-    
-    @MainActor private func cellForItem(collectionView: UICollectionView, at indexPath: IndexPath) -> UICollectionViewCell {
-        return cellProvider((collectionView, indexPath, fetchResult(for: indexPath.section)!.object(at: indexPath.item)))
+        for collectionType in [PHAssetCollectionType.smartAlbum, PHAssetCollectionType.album] {
+            guard let fetchResult: PHFetchResult<PHAssetCollection> = fetchResults[collectionType] else {
+                continue
+            }
+            
+            let count = fetchResult.count
+            guard count > .zero else {
+                continue
+            }
+            
+            let section: Int = numberOfItemsInSection.count
+            
+            numberOfItemsInSection[section] = count
+            collectionTypesForSection[section] = collectionType
+        }
+        
+        let numberOfSections = numberOfItemsInSection.count
+        
+        return (numberOfSections, numberOfItemsInSection, collectionTypesForSection)
     }
     
     private func photoLibraryDidChange(_ changeInstance: PHChange) async {
-        let smartCollectionsFetchResult: PHFetchResult<PHAssetCollection>? = await MainActor.run { self.smartCollectionsFetchResult }
-        
-        let smartCollectionChangeDetails: PHFetchResultChangeDetails<PHAssetCollection>?
-        let smartCollectionsFetchResultAfterChanges: PHFetchResult<PHAssetCollection>?
-        
-        if let smartCollectionsFetchResult: PHFetchResult<PHAssetCollection> {
-            smartCollectionChangeDetails = changeInstance.changeDetails(for: smartCollectionsFetchResult)
-            smartCollectionsFetchResultAfterChanges = smartCollectionChangeDetails?.fetchResultAfterChanges ?? smartCollectionsFetchResult
-        } else {
-            smartCollectionChangeDetails = nil
-            smartCollectionsFetchResultAfterChanges = smartCollectionsFetchResult
-        }
+        var fetchResults: [PHAssetCollectionType: PHFetchResult<PHAssetCollection>] = await MainActor.run { self.fetchResults }
+        let collectionTypesForSection: [Int: PHAssetCollectionType] = await MainActor.run { self.collectionTypesForSection }
         
         //
         
-        let collectionsFetchResult: PHFetchResult<PHAssetCollection>? = await MainActor.run { self.collectionsFetchResult }
-        let collectionChangeDetails: PHFetchResultChangeDetails<PHAssetCollection>?
-        let collectionsFetchResultAfterChanges: PHFetchResult<PHAssetCollection>?
+        var removedIndexPaths: [IndexPath] = .init()
+        var insertedIndexPaths: [IndexPath] = .init()
+        var changedIndexPaths: [IndexPath] = .init()
+        var movedIndexPaths: [(old: IndexPath, new: IndexPath)] = .init()
         
-        if let collectionsFetchResult: PHFetchResult<PHAssetCollection> {
-            collectionChangeDetails = changeInstance.changeDetails(for: collectionsFetchResult)
-            collectionsFetchResultAfterChanges = collectionChangeDetails?.fetchResultAfterChanges ?? collectionsFetchResult
-        } else {
-            collectionChangeDetails = nil
-            collectionsFetchResultAfterChanges = collectionsFetchResult
-        }
-        
-        //
-        
-        let (oldSmartCollectionsSection, oldCollectionsSection): (Int?, Int?) = sections(smartCollectionsFetchResult: smartCollectionsFetchResult, collectionsFetchResult: collectionsFetchResult)
-        let (newSmartCollectionsSection, newCollectionsSection): (Int?, Int?) = sections(smartCollectionsFetchResult: smartCollectionsFetchResultAfterChanges, collectionsFetchResult: collectionsFetchResultAfterChanges)
-        
-        var deletedSections: IndexSet = .init()
-        var insertedSections: IndexSet = .init()
-        [(oldSmartCollectionsSection, newSmartCollectionsSection), (oldCollectionsSection, newCollectionsSection)]
-            .forEach { oldSection, newSection in
-                if let oldSection: Int, newSection == nil {
-                    deletedSections.insert(oldSection)
-                } else if oldSection == nil, let newSection: Int {
-                    insertedSections.insert(newSection)
+        for collectionType in [PHAssetCollectionType.smartAlbum, PHAssetCollectionType.album] {
+            guard
+                let section: Int = collectionTypesForSection.first(where: { $0.value == collectionType })?.key,
+                let oldFetchResult: PHFetchResult<PHAssetCollection> = fetchResults[collectionType],
+                let changeDetails: PHFetchResultChangeDetails<PHAssetCollection> = changeInstance.changeDetails(for: oldFetchResult),
+                changeDetails.hasIncrementalChanges
+            else {
+                continue
+            }
+            
+            let newFetchResult: PHFetchResult<PHAssetCollection> = changeDetails.fetchResultAfterChanges
+            
+            if let removedIndexes: IndexSet = changeDetails.removedIndexes {
+                let _removedIndexPaths: [IndexPath] = removedIndexes
+                    .map { IndexPath(item: $0, section: section) }
+                removedIndexPaths.append(contentsOf: _removedIndexPaths)
+            }
+            
+            if let insertedIndexes: IndexSet = changeDetails.insertedIndexes {
+                let _insertedIndexPaths: [IndexPath] = insertedIndexes
+                    .map { IndexPath(item: $0, section: section) }
+                insertedIndexPaths.append(contentsOf: _insertedIndexPaths)
+            }
+            
+            if let changedIndexes: IndexSet = changeDetails.changedIndexes {
+                let _changedIndexPaths: [IndexPath] = changedIndexes
+                    .map { IndexPath(item: $0, section: section) }
+                changedIndexPaths.append(contentsOf: _changedIndexPaths)
+            }
+            
+            if changeDetails.hasMoves {
+                changeDetails.enumerateMoves { old, new in
+                    movedIndexPaths.append((.init(item: old, section: section), new: .init(item: new, section: section)))
                 }
             }
-        
-        //
-        
-        let smartCollectionsRemovedIndexPaths: [IndexPath]?
-        let smartCollectionsInsertedIndexPaths: [IndexPath]?
-        let smartCollectionsChangedIndexPaths: [IndexPath]?
-        
-        if 
-            let smartCollectionChangeDetails: PHFetchResultChangeDetails<PHAssetCollection>,
-            let newSmartCollectionsSection: Int
-        {
-            smartCollectionsRemovedIndexPaths = smartCollectionChangeDetails
-                .removedIndexes?
-                .map { .init(item: $0, section: newSmartCollectionsSection) }
             
-            smartCollectionsInsertedIndexPaths = smartCollectionChangeDetails
-                .insertedIndexes?
-                .map { .init(item: $0, section: newSmartCollectionsSection) }
-            
-            smartCollectionsChangedIndexPaths = smartCollectionChangeDetails
-                .changedIndexes?
-                .map { .init(item: $0, section: newSmartCollectionsSection) }
-        } else {
-            smartCollectionsRemovedIndexPaths = nil
-            smartCollectionsInsertedIndexPaths = nil
-            smartCollectionsChangedIndexPaths = nil
+            fetchResults[collectionType] = newFetchResult
         }
         
         //
         
-        let collectionsRemovedIndexPaths: [IndexPath]?
-        let collectionsInsertedIndexPaths: [IndexPath]?
-        let collectionsChangedIndexPaths: [IndexPath]?
-        
-        if 
-            let collectionChangeDetails: PHFetchResultChangeDetails<PHAssetCollection>,
-            let newCollectionsSection: Int
-        {
-            collectionsRemovedIndexPaths = collectionChangeDetails
-                .removedIndexes?
-                .map { .init(item: $0, section: newCollectionsSection) }
-            
-            collectionsInsertedIndexPaths = collectionChangeDetails
-                .insertedIndexes?
-                .map { .init(item: $0, section: newCollectionsSection) }
-            
-            collectionsChangedIndexPaths = collectionChangeDetails
-                .changedIndexes?
-                .map { .init(item: $0, section: newCollectionsSection) }
-        } else {
-            collectionsRemovedIndexPaths = nil
-            collectionsInsertedIndexPaths = nil
-            collectionsChangedIndexPaths = nil
-        }
-        
-        //
-        
-        guard 
-            !deletedSections.isEmpty ||
-                !insertedSections.isEmpty ||
-                !(smartCollectionsRemovedIndexPaths?.isEmpty ?? true) ||
-                !(smartCollectionsInsertedIndexPaths?.isEmpty ?? true) ||
-                !(smartCollectionsChangedIndexPaths?.isEmpty ?? true) ||
-                !(collectionsRemovedIndexPaths?.isEmpty ?? true) ||
-                !(collectionsInsertedIndexPaths?.isEmpty ?? true) ||
-                !(collectionsChangedIndexPaths?.isEmpty ?? true) 
+        guard
+            !removedIndexPaths.isEmpty ||
+                !insertedIndexPaths.isEmpty ||
+                !changedIndexPaths.isEmpty ||
+                !movedIndexPaths.isEmpty
         else {
             return
-        } 
+        }
         
-        //
-        
-        await MainActor.run { [deletedSections, insertedSections] in
-            self.smartCollectionsFetchResult = smartCollectionsFetchResultAfterChanges
-            self.collectionsFetchResult = collectionsFetchResultAfterChanges
-            
+        await MainActor.run { [fetchResults, removedIndexPaths, insertedIndexPaths, changedIndexPaths, movedIndexPaths] in
             guard let collectionView: UICollectionView else { return }
             
             collectionView.performBatchUpdates {
-                if !deletedSections.isEmpty {
-                    collectionView.deleteSections(deletedSections)
-                }              
+                let (numberOfSections, numberOfItemsInSection, collectionTypesForSection) = dataSourceProperties(from: fetchResults)
                 
-                if !insertedSections.isEmpty {
-                    collectionView.insertSections(insertedSections)
-                }
+                self.numberOfSections = numberOfSections
+                self.numberOfItemsInSection = numberOfItemsInSection
+                self.fetchResults = fetchResults
+                self.collectionTypesForSection = collectionTypesForSection
                 
-                if let smartCollectionsRemovedIndexPaths: [IndexPath] {
-                    collectionView.deleteItems(at: smartCollectionsRemovedIndexPaths)
-                }
+                //
                 
-                if let smartCollectionsInsertedIndexPaths: [IndexPath] {
-                    collectionView.insertItems(at: smartCollectionsInsertedIndexPaths)
-                }
+                collectionView.deleteItems(at: removedIndexPaths)
+                collectionView.insertItems(at: insertedIndexPaths)
+                collectionView.reconfigureItems(at: changedIndexPaths)
                 
-                if let smartCollectionsChangedIndexPaths: [IndexPath] {
-                    collectionView.reconfigureItems(at: smartCollectionsChangedIndexPaths)
-                }
-                
-                if let collectionsRemovedIndexPaths: [IndexPath] {
-                    collectionView.deleteItems(at: collectionsRemovedIndexPaths)
-                }
-                
-                if let collectionsInsertedIndexPaths: [IndexPath] {
-                    collectionView.insertItems(at: collectionsInsertedIndexPaths)
-                }
-                
-                if let collectionsChangedIndexPaths: [IndexPath] {
-                    collectionView.reconfigureItems(at: collectionsChangedIndexPaths)
-                }
+                movedIndexPaths
+                    .forEach { (old, new) in
+                        collectionView.moveItem(at: old, to: new)
+                    }
             }
         }
-    }
-    
-    @MainActor
-    private func fetchResult(for section: Int) -> PHFetchResult<PHAssetCollection>? {
-        let smartCollectionsCount: Int = smartCollectionsFetchResult?.count ?? .zero
-        let collectionsCount: Int = collectionsFetchResult?.count ?? .zero
-        
-        if smartCollectionsCount > .zero && collectionsCount == .zero {
-            switch section {
-            case .zero:
-                return smartCollectionsFetchResult
-            default:
-                return nil
-            }
-        } else if smartCollectionsCount > .zero && collectionsCount > .zero {
-            switch section {
-            case .zero:
-                return smartCollectionsFetchResult
-            case 1:
-                return collectionsFetchResult
-            default:
-                return nil
-            }
-        } else if smartCollectionsCount == .zero && collectionsCount == .zero {
-            return nil
-        } else if smartCollectionsCount == .zero && collectionsCount > .zero {
-            switch section {
-            case .zero:
-                return collectionsFetchResult
-            default:
-                return nil
-            }
-        } else {
-            return nil
-        }
-    }
-    
-    private nonisolated func sections(smartCollectionsFetchResult: PHFetchResult<PHAssetCollection>?, collectionsFetchResult: PHFetchResult<PHAssetCollection>?) -> (smartCollectionsSection: Int?, collectionsSection: Int?) {
-        let smartCollectionsCount: Int = smartCollectionsFetchResult?.count ?? .zero
-        let collectionsCount: Int = collectionsFetchResult?.count ?? .zero
-        
-        let smartCollectionsSection: Int?
-        let collectionsSection: Int?
-        
-        if smartCollectionsCount > .zero && collectionsCount == .zero {
-            smartCollectionsSection = .zero
-            collectionsSection = nil
-        } else if smartCollectionsCount > .zero && collectionsCount > .zero {
-            smartCollectionsSection = .zero
-            collectionsSection = 1
-        } else if smartCollectionsCount == .zero && collectionsCount > .zero {
-            smartCollectionsSection = nil
-            collectionsSection = .zero
-        } else {
-            smartCollectionsSection = nil
-            collectionsSection = nil
-        }
-        
-        return (smartCollectionsSection, collectionsSection)
     }
 }

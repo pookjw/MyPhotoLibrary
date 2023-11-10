@@ -69,9 +69,12 @@ final class CollectionsViewController: UIViewController {
     private func buildCollectionsDataSource() -> CollectionsDataSource {
         let cellRegistration: UICollectionView.CellRegistration<UICollectionViewListCell, PHAssetCollection> = buildCellRegistration()
         
-        let dataSource: CollectionsDataSource = .init(collectionView: collectionView) { (collectionView: UICollectionView, indexPath: IndexPath, collection: PHAssetCollection) in
-            collectionView.dequeueConfiguredReusableCell(using: cellRegistration, for: indexPath, item: collection)
+        let dataSource: CollectionsDataSource = .init(collectionView: collectionView) { collectionView, indexPath, fetchResult in
+            collectionView.dequeueConfiguredReusableCell(using: cellRegistration, for: indexPath, item: fetchResult.object(at: indexPath.item))
+        } supplementaryViewProvider: { collectionView, elementKind, indexPath in
+            fatalError()
         }
+
         
         return dataSource
     }

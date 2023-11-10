@@ -9,7 +9,7 @@ import Foundation
 import Photos
 
 actor PhotoLibraryChangeObserver: NSObject, PHPhotoLibraryChangeObserver {
-    typealias PhotoLibraryDidChangeResolver = @Sendable (PHChange) -> Void
+    typealias PhotoLibraryDidChangeResolver = @Sendable (_ changeInstance: PHChange) -> Void
     
     private let photoLibraryDidChangeResolver: PhotoLibraryDidChangeResolver
     
