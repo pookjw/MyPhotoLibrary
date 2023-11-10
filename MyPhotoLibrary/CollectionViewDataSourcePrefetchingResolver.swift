@@ -9,8 +9,8 @@ import UIKit
 
 @MainActor
 final class CollectionViewDataSourcePrefetchingResolver: NSObject, UICollectionViewDataSourcePrefetching {
-    typealias PrefetchItemsAtResolver = @MainActor (_ collectionView: UICollectionView, _ indexPaths: [IndexPath]) -> Void
-    typealias CancelPrefetchingForItemsAtResolver = @MainActor (_ collectionView: UICollectionView, _ indexPaths: [IndexPath]) -> Void
+    typealias PrefetchItemsAtResolver = @Sendable @MainActor (_ collectionView: UICollectionView, _ indexPaths: [IndexPath]) -> Void
+    typealias CancelPrefetchingForItemsAtResolver = @Sendable @MainActor (_ collectionView: UICollectionView, _ indexPaths: [IndexPath]) -> Void
     
     private let prefetchItemsAtResolver: PrefetchItemsAtResolver
     private let cancelPrefetchingForItemsAtResolver: CancelPrefetchingForItemsAtResolver
