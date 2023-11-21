@@ -107,7 +107,7 @@ final class AssetsViewController: UIViewController {
         
         return UICollectionViewCompositionalLayout(
             sectionProvider: { sectionIndex, environment in
-                let quotient: Int = .init(floorf(Float(environment.container.contentSize.width) / 200.0))
+                let quotient: Int = .init(floorf(Float(environment.container.effectiveContentSize.width) / 200.0))
                 let count: Int = (quotient < 2) ? 2 : quotient
                 let count_f: Float = .init(count)
                 
