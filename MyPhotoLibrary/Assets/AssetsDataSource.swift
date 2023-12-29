@@ -386,8 +386,6 @@ actor AssetsDataSource {
         } 
         
         await MainActor.run {
-            self.fetchResult = fetchResultAfterChanges
-            
             guard let collectionView: UICollectionView else { return }
             
             collectionView.performBatchUpdates {
@@ -406,6 +404,8 @@ actor AssetsDataSource {
                 changeDetails.enumerateMoves { fromIndex, toIndex in
                     collectionView.moveItem(at: .init(item: fromIndex, section: .zero), to: .init(item: toIndex, section: .zero))
                 }
+                
+                self.fetchResult = fetchResultAfterChanges
             }
         }
     }
