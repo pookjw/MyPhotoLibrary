@@ -382,11 +382,19 @@ actor AssetsDataSource {
             .map { .init(item: $0, section: .zero) }
         
         guard !(removedIndexPaths?.isEmpty ?? true) || !(insertedIndexPaths?.isEmpty ?? true) || !(changedIndexPaths?.isEmpty ?? true) || changeDetails.hasMoves else {
+            await MainActor.run {
+                self.fetchResult = fetchResultAfterChanges
+            }
+            
             return
         } 
         
         await MainActor.run {
-            guard let collectionView: UICollectionView else { return }
+            guard let collectionView: UICollectionView else { 
+                self.fetchResult = fetchResultAfterChanges
+                return
+            }
+            
             
             collectionView.performBatchUpdates {
                 self.fetchResult = fetchResultAfterChanges

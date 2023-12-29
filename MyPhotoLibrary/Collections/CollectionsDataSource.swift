@@ -222,11 +222,18 @@ actor CollectionsDataSource {
                 !changedIndexPaths.isEmpty ||
                 !movedIndexPaths.isEmpty
         else {
+            await MainActor.run { [fetchResults] in
+                self.fetchResults = fetchResults
+            }
+            
             return
         }
         
         await MainActor.run { [fetchResults, removedIndexPaths, insertedIndexPaths, changedIndexPaths, movedIndexPaths] in
-            guard let collectionView: UICollectionView else { return }
+            guard let collectionView: UICollectionView else {
+                self.fetchResults = fetchResults
+                return
+            }
             
             collectionView.performBatchUpdates {
                 let (numberOfSections, numberOfItemsInSection, collectionTypesForSection) = dataSourceProperties(from: fetchResults)
