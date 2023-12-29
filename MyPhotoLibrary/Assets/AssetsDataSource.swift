@@ -389,6 +389,8 @@ actor AssetsDataSource {
             guard let collectionView: UICollectionView else { return }
             
             collectionView.performBatchUpdates {
+                self.fetchResult = fetchResultAfterChanges
+                
                 if let removedIndexPaths: [IndexPath] {
                     collectionView.deleteItems(at: removedIndexPaths)
                 }
@@ -404,8 +406,6 @@ actor AssetsDataSource {
                 changeDetails.enumerateMoves { fromIndex, toIndex in
                     collectionView.moveItem(at: .init(item: fromIndex, section: .zero), to: .init(item: toIndex, section: .zero))
                 }
-                
-                self.fetchResult = fetchResultAfterChanges
             }
         }
     }
